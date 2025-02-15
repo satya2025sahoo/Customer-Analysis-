@@ -26,9 +26,9 @@ def get_sentiment(feedback):
         return "Neutral"
     analysis = TextBlob(feedback)
     if analysis.sentiment.polarity > 0:
-        return "Happy"
+        return "Positive"
     elif analysis.sentiment.polarity < 0:
-        return "Sad"
+        return "Negative"
     else:
         return "Neutral"
 
@@ -137,6 +137,12 @@ st.plotly_chart(fig)
 
 # Revenue Forecasting
 st.subheader("Revenue Forecasting")
+if len(revenue_by_day) < 14:  # Less than 2 full weeks
+    st.warning("Not enough data for seasonal forecasting. Showing trend-only forecast.")
+    model = ExponentialSmoothing(revenue_by_day['Amount'], trend='add', seasonal=None)
+else:
+    model = ExponentialSmoothing(revenue_by_day['Amount'], trend='add', seasonal='add', seasonal_periods=7)
+
 try:
     # Prepare data for forecasting
     revenue_by_day = filtered_data.groupby(filtered_data['Time'].dt.date)['Amount'].sum().reset_index()
@@ -144,9 +150,9 @@ try:
     revenue_by_day.index = pd.to_datetime(revenue_by_day.index)
 
     # Fit Holt-Winters model
-    model = ExponentialSmoothing(revenue_by_day['Amount'], trend='add', seasonal='add', seasonal_periods=7)
+    #model = ExponentialSmoothing(revenue_by_day['Amount'], trend='add', seasonal='add', seasonal_periods=7)
     fit = model.fit()
-    forecast = fit.forecast(steps=7)  # Forecast next 7 days
+    forecast = fit.forecast(steps=2)  # Forecast next 2 days
 
     # Plot forecast
     fig = go.Figure()
@@ -205,6 +211,41 @@ st.write(top_combinations[['Indian Dishes', 'English Dishes', 'Beverages', 'Perc
 # Visualize top combinations
 fig = px.bar(top_combinations, x='Percentage', y='Indian Dishes', color='Beverages', title="Top 10 Combinations of Indian/English Dishes with Beverages (%)")
 st.plotly_chart(fig)
+
+import streamlit as st
+import pandas as pd
+import nltk
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lsa import LsaSummarizer
+
+# Ensure the required NLTK resource is available
+nltk.download("punkt_tab")
+
+# Summarization function
+def summarize_feedback(feedback_list, num_sentences=3):
+    if not feedback_list:
+        return "No feedback available to summarize."
+    
+    combined_text = " ".join(feedback_list)
+    
+    try:
+        parser = PlaintextParser.from_string(combined_text, Tokenizer("english"))
+        summarizer = LsaSummarizer()
+        summary = summarizer(parser.document, num_sentences)
+        return " ".join(str(sentence) for sentence in summary)
+    except Exception as e:
+        return f"Error summarizing feedback: {e}"
+
+
+feedbacks = data['Feedback']
+
+feedbacks = data['Feedback'].dropna()  # Drop missing values
+
+if not feedbacks.empty:  # Proper check for pandas Series
+    summary = summarize_feedback(feedbacks.tolist())  # Convert Series to list
+    st.subheader("📝 Summarized Feedback")
+    st.write(summary)
 
 
 # Raw Data
