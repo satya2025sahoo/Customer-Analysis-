@@ -7,8 +7,7 @@ import plotly.graph_objects as go
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
-from statsmodels.tsa.holtwinters import ExponentialSmoothing  # For revenue forecasting
-
+from transformers import pipeline  # For NLP summarization
 
 # Load the data
 @st.cache_data
@@ -135,27 +134,31 @@ revenue_by_segment = customer_spending.groupby('Segment')['Amount'].sum().reset_
 fig = px.pie(revenue_by_segment, values='Amount', names='Segment', title="Revenue Contribution by Customer Segment")
 st.plotly_chart(fig)
 
-# Revenue Forecasting
-st.subheader("Revenue Forecasting")
-try:
-    # Prepare data for forecasting
-    revenue_by_day = filtered_data.groupby(filtered_data['Time'].dt.date)['Amount'].sum().reset_index()
-    revenue_by_day.set_index('Time', inplace=True)
-    revenue_by_day.index = pd.to_datetime(revenue_by_day.index)
+# Feedback Summary for Improvement
+st.header("📝 Customer Feedback Summary for Improvement")
 
-    # Fit Holt-Winters model
-    model = ExponentialSmoothing(revenue_by_day['Amount'], trend='add', seasonal='add', seasonal_periods=7)
-    fit = model.fit()
-    forecast = fit.forecast(steps=7)  # Forecast next 7 days
+# Extract feedback for improvement
+feedback_for_improvement = filtered_data[filtered_data['Feedback'].notna()]['Feedback']
 
-    # Plot forecast
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=revenue_by_day.index, y=revenue_by_day['Amount'], name="Historical Revenue"))
-    fig.add_trace(go.Scatter(x=forecast.index, y=forecast, name="Forecasted Revenue"))
-    fig.update_layout(title="7-Day Revenue Forecast", xaxis_title="Date", yaxis_title="Revenue")
-    st.plotly_chart(fig)
-except Exception as e:
-    st.warning(f"Revenue forecasting failed: {e}")
+# Use Hugging Face's summarization pipeline
+@st.cache_resource
+def load_summarizer():
+    return pipeline("summarization", model="facebook/bart-large-cnn")
+
+summarizer = load_summarizer()
+
+if len(feedback_for_improvement) > 0:
+    # Combine all feedback into a single text
+    feedback_text = " ".join(feedback_for_improvement)
+
+    # Summarize the feedback
+    summary = summarizer(feedback_text, max_length=130, min_length=30, do_sample=False)[0]['summary_text']
+
+    # Display the summary
+    st.subheader("Summary of Customer Feedback")
+    st.write(summary)
+else:
+    st.warning("No feedback available for summarization.")
 
 # Customer Segmentation
 st.header("👥 Customer Segmentation")
@@ -205,7 +208,6 @@ st.write(top_combinations[['Indian Dishes', 'English Dishes', 'Beverages', 'Perc
 # Visualize top combinations
 fig = px.bar(top_combinations, x='Percentage', y='Indian Dishes', color='Beverages', title="Top 10 Combinations of Indian/English Dishes with Beverages (%)")
 st.plotly_chart(fig)
-
 
 # Raw Data
 st.header("📂 Raw Data")
